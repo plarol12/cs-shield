@@ -1,0 +1,150 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>CS-SHIELD — Catch the Moving Target</title>
+<style>
+  /* ===== EDIT HERE ===================================================== */
+  /* Paper link and number of hits are set in the <script> at the bottom. */
+  /* ===================================================================== */
+  :root {
+    --bg: #f6f9fb; --ink: #16202a; --muted: #5a6b7b; --line: #d9e3ea;
+    --liu: #0077a3; --ring: #00b9e7; --hit: #009e8a; --miss: #c8432a; --card: #ffffff;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root { --bg: #0f161c; --ink: #e6edf2; --muted: #9aabb9; --line: #2a3742;
+            --liu: #4cc7ee; --ring: #2ab4dd; --hit: #3fd0b8; --miss: #f07a5f; --card: #17222b; color-scheme: dark; }
+  }
+  * { box-sizing: border-box; }
+  html, body { height: 100%; margin: 0; }
+  body { background: var(--bg); color: var(--ink); font: 16px/1.5 system-ui, -apple-system, "Segoe UI", Roboto, Arial, sans-serif;
+         display: flex; flex-direction: column; padding: env(safe-area-inset-top) 16px env(safe-area-inset-bottom); }
+  header { max-width: 640px; width: 100%; margin: 0 auto; padding-top: 20px; }
+  .eyebrow { font-size: 12px; font-weight: 700; letter-spacing: .12em; text-transform: uppercase; color: var(--liu); margin: 0 0 6px; }
+  h1 { font-size: clamp(20px, 5vw, 26px); line-height: 1.2; margin: 0 0 6px; text-wrap: balance; }
+  .task { margin: 0; color: var(--muted); font-size: 15px; }
+  .hud { max-width: 640px; width: 100%; margin: 14px auto 10px; display: flex; align-items: center; justify-content: space-between; gap: 12px; }
+  .pips { display: flex; gap: 8px; }
+  .pip { width: 16px; height: 16px; border-radius: 50%; border: 2px solid var(--line); transition: background .2s, border-color .2s; }
+  .pip.on { background: var(--hit); border-color: var(--hit); }
+  .msg { font-size: 14px; color: var(--muted); text-align: right; min-height: 21px; }
+  .msg.miss { color: var(--miss); }
+  .msg.hit { color: var(--hit); }
+  #arena { position: relative; flex: 1; min-height: 320px; max-width: 640px; width: 100%; margin: 0 auto 16px;
+           background: var(--card); border: 1px solid var(--line); border-radius: 16px; overflow: hidden; touch-action: manipulation;
+           background-image: radial-gradient(var(--line) 1px, transparent 1px); background-size: 22px 22px; }
+  #target { position: absolute; width: 76px; height: 76px; margin: -38px 0 0 -38px; padding: 0; border: 0; border-radius: 50%; cursor: pointer;
+            background: radial-gradient(circle, var(--miss) 0 14%, var(--liu) 15% 34%, var(--card) 35% 52%, var(--liu) 53% 70%, var(--card) 71% 84%, var(--ring) 85% 100%);
+            transition: left .28s cubic-bezier(.3,.7,.2,1), top .28s cubic-bezier(.3,.7,.2,1), transform .15s; }
+  #target:active { transform: scale(.92); }
+  #target:focus-visible { outline: 3px solid var(--ink); outline-offset: 4px; }
+  .ip { position: absolute; transform: translate(-50%, 44px); font: 600 12px ui-monospace, Menlo, Consolas, monospace; color: var(--muted);
+        pointer-events: none; white-space: nowrap; transition: left .28s cubic-bezier(.3,.7,.2,1), top .28s cubic-bezier(.3,.7,.2,1); }
+  .ghost { position: absolute; width: 76px; height: 76px; margin: -38px 0 0 -38px; border-radius: 50%; border: 2px dashed var(--line);
+           pointer-events: none; animation: fade .7s forwards; }
+  @keyframes fade { to { opacity: 0; transform: scale(1.4); } }
+  #win { position: absolute; inset: 0; display: grid; place-items: center; padding: 20px; background: var(--card); text-align: center; }
+  #win[hidden] { display: none; }
+  #win h2 { font-size: 22px; margin: 0 0 8px; }
+  #win p { margin: 0 auto 18px; max-width: 42ch; color: var(--muted); }
+  .btn { display: inline-block; font-weight: 700; font-size: 17px; color: #fff; background: var(--liu); border: 0; border-radius: 999px;
+         padding: 14px 26px; text-decoration: none; cursor: pointer; }
+  .btn:focus-visible { outline: 3px solid var(--ring); outline-offset: 3px; }
+  .again { display: block; margin: 14px auto 0; background: none; border: 0; color: var(--muted); font: inherit; font-size: 14px; text-decoration: underline; cursor: pointer; }
+  footer { max-width: 640px; width: 100%; margin: 0 auto 16px; font-size: 12.5px; color: var(--muted); }
+  @media (prefers-reduced-motion: reduce) { #target, .ip { transition: none; } .ghost { display: none; } }
+</style>
+</head>
+<body>
+<header>
+  <p class="eyebrow">Linköping University · CS-SHIELD</p>
+  <h1>Moving Target Defense in SDN-enabled EV Charging Networks</h1>
+  <p class="task" id="task">You are the attacker. Tap the charger <b id="need">5</b> times in a row. Every time you find it, CS-SHIELD gives it a new address.</p>
+</header>
+
+<div class="hud">
+  <div class="pips" id="pips" aria-label="Hits in a row"></div>
+  <div class="msg" id="msg" aria-live="polite">Find the charger</div>
+</div>
+
+<main id="arena" aria-label="Game area">
+  <button id="target" type="button" aria-label="Charger — tap it"></button>
+  <span class="ip" id="ip">10.0.2.14</span>
+  <div id="win" hidden>
+    <div>
+      <h2>You found it — and it moved every time</h2>
+      <p>That is moving target defense: whatever the attacker learns about the chargers goes stale after each shuffle. In our tests, CS-SHIELD detected and stopped a low-rate DoS attack in 17.9 ms with all chargers staying online.</p>
+      <a class="btn" id="paper" href="#" target="_blank" rel="noopener">Open the paper</a>
+      <button class="again" id="again" type="button">Play again</button>
+    </div>
+  </div>
+</main>
+
+<footer>Roland Plaka, Mikael Asplund, Simin Nadjm-Tehrani · Linköping University · roland.plaka@liu.se</footer>
+
+<script>
+/* ===== EDIT HERE ===================================================== */
+const PAPER_URL   = "https://liuonline-my.sharepoint.com/:b:/g/personal/rolpl55_liu_se/IQBB8lB88R4DRKFOPiADNKvrAUKQShK6zUJRk23aFf6_cZ4?e=94OIXZ";   // paper link (DOI, DiVA, arXiv, PDF)
+const HITS_NEEDED = 5;    // how many hits in a row unlock the paper (3–5 works well)
+const AUTO_MOVE_MS = 1700; // the charger also moves on its own after this many ms
+/* ===================================================================== */
+
+const arena = document.getElementById('arena'), target = document.getElementById('target'), ip = document.getElementById('ip');
+const pips = document.getElementById('pips'), msg = document.getElementById('msg'), win = document.getElementById('win');
+const paper = document.getElementById('paper');
+document.getElementById('need').textContent = HITS_NEEDED;
+for (let i = 0; i < HITS_NEEDED; i++) { const p = document.createElement('span'); p.className = 'pip'; pips.appendChild(p); }
+
+if (PAPER_URL) { paper.href = PAPER_URL; }
+else { paper.removeAttribute('href'); paper.removeAttribute('target'); paper.textContent = 'Paper link coming soon'; paper.style.opacity = .6; }
+
+let streak = 0, timer = null, done = false;
+const rnd = (a, b) => a + Math.random() * (b - a);
+const newIp = () => `10.${Math.floor(rnd(0, 256))}.${Math.floor(rnd(0, 256))}.${Math.floor(rnd(1, 255))}`;
+
+function place(first) {
+  const r = arena.getBoundingClientRect(), m = 48;
+  const ox = parseFloat(target.style.left) || 0, oy = parseFloat(target.style.top) || 0;
+  if (!first) { const g = document.createElement('div'); g.className = 'ghost'; g.style.left = ox + 'px'; g.style.top = oy + 'px'; arena.appendChild(g); setTimeout(() => g.remove(), 800); }
+  let x, y, tries = 0;
+  do { x = rnd(m, Math.max(m + 1, r.width - m)); y = rnd(m, Math.max(m + 1, r.height - m - 24)); tries++; }
+  while (!first && Math.hypot(x - ox, y - oy) < Math.min(r.width, r.height) * 0.35 && tries < 30);
+  target.style.left = ip.style.left = x + 'px';
+  target.style.top = ip.style.top = y + 'px';
+  ip.textContent = newIp();
+}
+function setPips() { [...pips.children].forEach((p, i) => p.classList.toggle('on', i < streak)); }
+function say(t, cls) { msg.textContent = t; msg.className = 'msg' + (cls ? ' ' + cls : ''); }
+function restartTimer() {
+  clearInterval(timer);
+  timer = setInterval(() => { if (!done) { place(false); } }, AUTO_MOVE_MS);
+}
+
+target.addEventListener('click', (e) => {
+  e.stopPropagation();
+  if (done) return;
+  streak++; setPips();
+  if (streak >= HITS_NEEDED) {
+    done = true; clearInterval(timer); say('Unlocked!', 'hit');
+    setTimeout(() => { win.hidden = false; paper.focus(); }, 350);
+    return;
+  }
+  say(`Hit ${streak}/${HITS_NEEDED} — address shuffled`, 'hit');
+  place(false); restartTimer();
+});
+
+arena.addEventListener('click', () => {
+  if (done || streak === 0) { if (!done) say('Missed — keep trying', 'miss'); return; }
+  streak = 0; setPips(); say('Missed — streak reset', 'miss');
+});
+
+document.getElementById('again').addEventListener('click', (e) => {
+  e.stopPropagation(); done = false; streak = 0; setPips(); win.hidden = true; say('Find the charger'); place(true); restartTimer();
+});
+
+window.addEventListener('resize', () => { if (!done) place(true); });
+place(true); restartTimer();
+</script>
+</body>
+</html>
